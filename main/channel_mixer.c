@@ -132,8 +132,9 @@ void mixer_process(const xbox_controller_state_t *xbox_state, crsf_channels_t *c
     }
     
     if (!xbox_state->connected) {
-        // Failsafe: everything centered except throttle
+        // Failsafe: throttle off, disarm
         crsf_out->ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MIN;
+        crsf_out->ch[s_config.arm_channel] = CRSF_CHANNEL_MIN;
         return;
     }
     
@@ -265,4 +266,9 @@ void mixer_process(const xbox_controller_state_t *xbox_state, crsf_channels_t *c
     // D-pad could be useful for trim or mode selection
     // Map to a 3-position switch style if needed
     // For now, not mapped by default
+    
+    // ========================================================================
+    // ARM channel: high when controller connected and sending data
+    // ========================================================================
+    crsf_out->ch[s_config.arm_channel] = CRSF_CHANNEL_MAX;
 }

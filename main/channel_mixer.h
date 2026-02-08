@@ -82,6 +82,9 @@ typedef struct {
     uint8_t throttle_endpoint;        // 0-100%
     uint8_t brake_endpoint;           // 0-100%
     
+    // ARM channel (high when controller connected and ready)
+    rc_channel_t arm_channel;
+    
     // Button → channel mappings
     rc_channel_t paddle_left_channel;   // Usually upshift
     rc_channel_t paddle_right_channel;  // Usually downshift
@@ -102,12 +105,13 @@ typedef struct {
     .throttle_invert = false, \
     .throttle_endpoint = 46, \
     .brake_endpoint = 28, \
-    .paddle_left_channel = RC_CH_AUX1, \
-    .paddle_right_channel = RC_CH_AUX2, \
-    .button_a_channel = RC_CH_AUX3, \
-    .button_b_channel = RC_CH_AUX4, \
-    .button_x_channel = RC_CH_AUX5, \
-    .button_y_channel = RC_CH_AUX6, \
+    .arm_channel = RC_CH_AUX1, \
+    .paddle_left_channel = RC_CH_AUX2, \
+    .paddle_right_channel = RC_CH_AUX3, \
+    .button_a_channel = RC_CH_AUX4, \
+    .button_b_channel = RC_CH_AUX5, \
+    .button_x_channel = RC_CH_AUX6, \
+    .button_y_channel = RC_CH_AUX7, \
 }
 
 /**
