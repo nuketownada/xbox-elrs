@@ -1,0 +1,8 @@
+# ESP-IDF Component Manager manifest
+# See: https://docs.espressif.com/projects/idf-component-manager/
+
+dependencies:
+  mdns: ~1.9.0
+  
+  # Note: For Xbox 360 receiver we'll use low-level USB Host APIs
+  # since it's a vendor-specific device, not standard HID

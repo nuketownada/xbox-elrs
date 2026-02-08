@@ -1,0 +1,67 @@
+# Xbox 360 Racing Wheel to ELRS Bridge - Default Configuration
+# Target: Seeed XIAO ESP32-S3
+
+# =============================================================================
+# Target chip
+# =============================================================================
+CONFIG_IDF_TARGET="esp32s3"
+
+# =============================================================================
+# USB Host Configuration
+# =============================================================================
+# Enable USB OTG peripheral in host mode
+CONFIG_USB_OTG_SUPPORTED=y
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
+CONFIG_USB_HOST_HW_BUFFER_BIAS_BALANCED=y
+
+# =============================================================================
+# Console - UART (not USB, since USB is used for host mode)
+# =============================================================================
+# Use UART0 for console, leaving USB free for host mode
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_NUM=0
+
+# =============================================================================
+# UART for CRSF output
+# =============================================================================
+# CRSF runs at 420000 baud - ensure UART can handle it
+# Using UART1 for CRSF (UART0 is console)
+CONFIG_UART_ISR_IN_IRAM=y
+
+# =============================================================================
+# WiFi Configuration
+# =============================================================================
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+
+# WiFi credentials (override in sdkconfig.local or menuconfig)
+CONFIG_WIFI_SSID="your_wifi_ssid"
+CONFIG_WIFI_PASSWORD="your_wifi_password"
+
+# =============================================================================
+# Partition Table - OTA support
+# =============================================================================
+# Use factory + 2 OTA partitions
+CONFIG_PARTITION_TABLE_TWO_OTA=y
+
+# =============================================================================
+# HTTP Client (for OTA)
+# =============================================================================
+CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=n
+
+# =============================================================================
+# FreeRTOS
+# =============================================================================
+CONFIG_FREERTOS_HZ=1000
+
+# =============================================================================
+# Flash size (XIAO ESP32-S3 has 8MB)
+# =============================================================================
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# =============================================================================
+# Logging
+# =============================================================================
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y

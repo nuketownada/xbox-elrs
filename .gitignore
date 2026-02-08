@@ -1,0 +1,27 @@
+# ESP-IDF build artifacts
+build/
+sdkconfig
+sdkconfig.old
+sdkconfig.local
+
+# Component manager
+managed_components/
+dependencies.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Nix
+result
+result-*
+.direnv/
+
+# macOS
+.DS_Store
+
+# Debug
+*.log

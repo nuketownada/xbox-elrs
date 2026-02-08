@@ -1,0 +1,27 @@
+idf_component_register(
+    SRCS 
+        "main.c"
+        "xbox_receiver.c"
+        "crsf.c"
+        "channel_mixer.c"
+        "wifi.c"
+        "udp_log.c"
+        "ota.c"
+    INCLUDE_DIRS "."
+    REQUIRES 
+        driver
+        esp_driver_gpio
+        esp_driver_uart
+        usb
+        freertos
+        esp_timer
+        esp_wifi
+        esp_netif
+        nvs_flash
+        lwip
+        mdns
+    PRIV_REQUIRES
+        esp_http_client
+        esp_https_ota
+        app_update
+)

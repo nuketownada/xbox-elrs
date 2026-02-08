@@ -1,0 +1,23 @@
+menu "Xbox-ELRS Configuration"
+
+    config WIFI_SSID
+        string "WiFi SSID"
+        default "your_wifi_ssid"
+        help
+            SSID (network name) for WiFi connection.
+            Used for UDP logging and OTA updates.
+
+    config WIFI_PASSWORD
+        string "WiFi Password"
+        default "your_wifi_password"
+        help
+            Password for WiFi connection.
+
+    config UDP_LOG_HOST
+        string "UDP Log Host (empty for broadcast)"
+        default ""
+        help
+            IP address to send UDP logs to.
+            Leave empty to broadcast to all hosts on the network.
+
+endmenu
