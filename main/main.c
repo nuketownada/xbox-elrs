@@ -19,7 +19,6 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -45,10 +44,6 @@ static const char *TAG = "xbox-elrs";
 #define UDP_LOG_PORT  3333
 #define OTA_CMD_PORT  3334
 
-// Current channel state (updated by callback, read by CRSF task)
-static crsf_channels_t g_channels;
-static SemaphoreHandle_t g_channels_mutex;
-
 // Mixer configuration
 static mixer_config_t g_mixer_config = MIXER_CONFIG_DEFAULT();
 
@@ -64,26 +59,19 @@ static void xbox_state_callback(xbox_slot_t slot, const xbox_controller_state_t 
     
     if (!state->connected) {
         ESP_LOGW(TAG, "Racing wheel disconnected");
-        // Set channels to safe defaults (center steering, no throttle)
-        if (xSemaphoreTake(g_channels_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
-                g_channels.ch[i] = CRSF_CHANNEL_MID;
-            }
-            g_channels.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MIN;  // Throttle to minimum
-            xSemaphoreGive(g_channels_mutex);
+        crsf_channels_t safe = {{0}};
+        for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
+            safe.ch[i] = CRSF_CHANNEL_MID;
         }
+        safe.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MIN;
+        crsf_set_channels(&safe);
         return;
     }
-    
-    // Process through mixer
+
+    // Process through mixer and update CRSF output
     crsf_channels_t new_channels;
     mixer_process(state, &new_channels);
-    
-    // Update global channel state
-    if (xSemaphoreTake(g_channels_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        memcpy(&g_channels, &new_channels, sizeof(crsf_channels_t));
-        xSemaphoreGive(g_channels_mutex);
-    }
+    crsf_set_channels(&new_channels);
     
     // Debug output - log on change
     static int16_t last_steer = 0;
@@ -102,26 +90,6 @@ static void xbox_state_callback(xbox_slot_t slot, const xbox_controller_state_t 
     }
 }
 
-/**
- * Task that periodically sends CRSF packets
- */
-static void crsf_send_task(void *pvParameters)
-{
-    const TickType_t interval = pdMS_TO_TICKS(4);  // 250Hz for ELRS
-    TickType_t last_wake = xTaskGetTickCount();
-    
-    while (1) {
-        // Get current channel state
-        if (xSemaphoreTake(g_channels_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-            crsf_set_channels(&g_channels);
-            xSemaphoreGive(g_channels_mutex);
-        }
-        
-        // Wait for next interval
-        vTaskDelayUntil(&last_wake, interval);
-    }
-}
-
 void app_main(void)
 {
     ESP_LOGI(TAG, "Xbox 360 Racing Wheel to ELRS Bridge starting...");
@@ -136,19 +104,6 @@ void app_main(void)
     
     // Initialize event loop
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    
-    // Create mutex for channel data
-    g_channels_mutex = xSemaphoreCreateMutex();
-    if (g_channels_mutex == NULL) {
-        ESP_LOGE(TAG, "Failed to create mutex");
-        return;
-    }
-    
-    // Initialize channels to safe defaults
-    for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
-        g_channels.ch[i] = CRSF_CHANNEL_MID;
-    }
-    g_channels.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MIN;
     
     // Connect to WiFi (for logging and OTA)
     ESP_LOGI(TAG, "Connecting to WiFi...");
@@ -181,11 +136,11 @@ void app_main(void)
         .interval_ms = 4,
     };
     ESP_ERROR_CHECK(crsf_init(&crsf_config));
-    ESP_LOGI(TAG, "CRSF initialized on GPIO%d", CRSF_TX_PIN);
-    
-    // Start CRSF transmission task
-    xTaskCreate(crsf_send_task, "crsf_send", 2048, NULL, 10, NULL);
-    
+    ESP_LOGI(TAG, "CRSF initialized on GPIO%d (250Hz)", CRSF_TX_PIN);
+
+    // Set initial safe channel state (throttle off)
+    crsf_set_channel(RC_CH_THROTTLE, CRSF_CHANNEL_MIN);
+
     // Initialize Xbox receiver (this blocks until receiver is connected)
     ESP_LOGI(TAG, "Initializing USB host for Xbox receiver...");
     ESP_ERROR_CHECK(xbox_receiver_init(xbox_state_callback));

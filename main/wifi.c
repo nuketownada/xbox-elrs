@@ -24,6 +24,7 @@ static EventGroupHandle_t s_wifi_event_group;
 static bool s_connected = false;
 static esp_ip4_addr_t s_ip_addr;
 static int s_retry_count = 0;
+static bool s_ever_connected = false;
 
 #define MAX_RETRY 10
 
@@ -52,10 +53,12 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_connected = false;
-        if (s_retry_count < MAX_RETRY) {
+        if (s_ever_connected || s_retry_count < MAX_RETRY) {
+            // Always retry after a successful connection (survives router reboots).
+            // Initial connection has a retry limit so wifi_init_sta can fail fast.
             esp_wifi_connect();
             s_retry_count++;
-            ESP_LOGI(TAG, "Retrying connection (%d/%d)", s_retry_count, MAX_RETRY);
+            ESP_LOGI(TAG, "Retrying WiFi connection...");
         } else {
             xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
             ESP_LOGE(TAG, "Connection failed after %d attempts", MAX_RETRY);
@@ -66,6 +69,7 @@ static void event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Connected, IP: " IPSTR, IP2STR(&s_ip_addr));
         s_retry_count = 0;
         s_connected = true;
+        s_ever_connected = true;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         mdns_init_service();
     }

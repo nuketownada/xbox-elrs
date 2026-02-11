@@ -128,6 +128,7 @@ cleanup:
     }
     const char *fail = "FAIL";
     send(client_sock, fail, 4, 0);
+    close(client_sock);
     s_ota_in_progress = false;
 }
 
@@ -177,7 +178,6 @@ static void ota_server_task(void *pvParameters)
         
         ESP_LOGI(TAG, "OTA connection from %s", inet_ntoa(client_addr.sin_addr));
         handle_ota_connection(client_sock);
-        close(client_sock);
     }
 }
 

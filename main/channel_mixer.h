@@ -53,11 +53,11 @@ typedef enum {
     MIX_MODE_THROTTLE_ONLY,
 } throttle_mix_mode_t;
 
-// Expo curve settings (-100 to +100)
-// Negative = softer center, positive = sharper center
+// Expo curve settings (0-100)
+// Higher values = softer center response (less sensitive around center)
 typedef struct {
-    int8_t steering;
-    int8_t throttle;
+    uint8_t steering;
+    uint8_t throttle;
 } expo_settings_t;
 
 // Deadband settings (0-50, percentage of center range)
@@ -141,10 +141,10 @@ void mixer_process(const xbox_controller_state_t *xbox_state, crsf_channels_t *c
  * Apply expo curve to an axis value
  * 
  * @param value Input value (-32768 to 32767)
- * @param expo Expo setting (-100 to 100)
+ * @param expo Expo setting (0-100)
  * @return Curved value
  */
-int16_t mixer_apply_expo(int16_t value, int8_t expo);
+int16_t mixer_apply_expo(int16_t value, uint8_t expo);
 
 /**
  * Apply deadband to an axis value

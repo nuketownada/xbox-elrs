@@ -143,14 +143,10 @@ static void parse_controller_report(xbox_slot_t slot, const uint8_t *data, size_
         return;
     }
     
-    // data[1] == 0x00 means idle/keepalive with no actual input data
-    // data[1] == 0x01 means actual input - only process these
+    // data[1] == 0x00 means idle/keepalive, 0x01 means actual input
     if (data[1] != 0x01) {
         return;
     }
-    
-    // data[1] == 0x00 means idle/keepalive, 0x01 means actual input
-    // We process both but only log changes
     
     if (xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(10)) != pdTRUE) {
         return;
@@ -161,9 +157,15 @@ static void parse_controller_report(xbox_slot_t slot, const uint8_t *data, size_
     state->connected = true;
     
     // Wheel position at bytes 10-11 (little-endian unsigned 16-bit)
-    // Convert to signed 16-bit centered at 0 for compatibility with stick axis
+    // Raw wheel reports inverted magnitude: center=0x0000, full turn approaches 0x8000
+    // Normalize to standard axis: center=0, left=negative, right=positive
     uint16_t wheel_raw = data[10] | (data[11] << 8);
-    state->left_stick_x = (int16_t)(wheel_raw - 0x8000);  // Center at 0
+    int16_t wheel_signed = (int16_t)(wheel_raw - 0x8000);
+    if (wheel_signed >= 0) {
+        state->left_stick_x = 32767 - wheel_signed;
+    } else {
+        state->left_stick_x = -32767 - wheel_signed;
+    }
     
     // Buttons appear to be at bytes 6-7 for the wheel
     uint16_t buttons = data[6] | (data[7] << 8);
@@ -189,14 +191,16 @@ static void parse_controller_report(xbox_slot_t slot, const uint8_t *data, size_
     state->right_stick_x = 0;
     state->right_stick_y = 0;
     
+    xbox_controller_state_t callback_copy;
+    memcpy(&callback_copy, state, sizeof(xbox_controller_state_t));
     xSemaphoreGive(s_state_mutex);
-    
+
     if (!was_connected) {
         ESP_LOGI(TAG, "Controller %d connected", slot);
     }
-    
+
     if (s_user_callback) {
-        s_user_callback(slot, state);
+        s_user_callback(slot, &callback_copy);
     }
 }
 
@@ -230,7 +234,7 @@ static void in_xfer_cb(usb_transfer_t *xfer)
     }
     
     // Resubmit if still connected
-    if (s_receiver_connected && s_device_hdl) {
+    if (s_receiver_connected && s_device_hdl && !s_device_gone) {
         esp_err_t err = usb_host_transfer_submit(xfer);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to resubmit IN xfer: %s", esp_err_to_name(err));
@@ -432,7 +436,8 @@ static void close_device(bool device_gone)
         if (s_controller_state[i].connected) {
             s_controller_state[i].connected = false;
             if (s_user_callback) {
-                s_user_callback(i, &s_controller_state[i]);
+                xbox_controller_state_t copy = s_controller_state[i];
+                s_user_callback(i, &copy);
             }
         }
     }

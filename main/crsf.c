@@ -24,6 +24,7 @@ static crsf_channels_t s_channels;
 static SemaphoreHandle_t s_channels_mutex;
 static bool s_running = false;
 static TaskHandle_t s_task_handle = NULL;
+static uint32_t s_interval_ms = 4;
 
 // CRC8 lookup table (polynomial 0xD5)
 static const uint8_t crc8_lut[256] = {
@@ -151,6 +152,21 @@ static void send_channels_frame(void)
     uart_write_bytes(s_uart_num, frame, sizeof(frame));
 }
 
+/**
+ * Periodic task that sends CRSF channel frames
+ */
+static void crsf_task(void *pvParameters)
+{
+    TickType_t last_wake = xTaskGetTickCount();
+
+    while (1) {
+        if (s_running) {
+            send_channels_frame();
+        }
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(s_interval_ms));
+    }
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -206,23 +222,29 @@ esp_err_t crsf_init(const crsf_config_t *config)
         return err;
     }
     
-    ESP_LOGI(TAG, "CRSF UART initialized: %d baud on GPIO%d", 
+    ESP_LOGI(TAG, "CRSF UART initialized: %d baud on GPIO%d",
              CRSF_BAUDRATE, config->tx_pin);
-    
+
+    // Start periodic send task
+    s_interval_ms = config->interval_ms > 0 ? config->interval_ms : 4;
+    s_running = true;
+    BaseType_t ret = xTaskCreate(crsf_task, "crsf_send", 2048, NULL, 10, &s_task_handle);
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create CRSF task");
+        return ESP_ERR_NO_MEM;
+    }
+
     return ESP_OK;
 }
 
 void crsf_set_channels(const crsf_channels_t *channels)
 {
     if (channels == NULL) return;
-    
+
     if (xSemaphoreTake(s_channels_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         memcpy(&s_channels, channels, sizeof(crsf_channels_t));
         xSemaphoreGive(s_channels_mutex);
     }
-    
-    // Also send immediately
-    send_channels_frame();
 }
 
 void crsf_set_channel(uint8_t channel, uint16_t value)

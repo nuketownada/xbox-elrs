@@ -21,29 +21,21 @@ static mixer_config_t s_config;
 
 /**
  * Apply expo curve to axis value
- * 
- * Expo formula: output = input * (1 - expo) + input^3 * expo
- * Where expo is normalized to -1.0 to 1.0
- * 
- * Negative expo = softer around center (good for steering)
- * Positive expo = sharper around center
+ *
+ * Standard RC expo: output = (1-k)*input + k*input^3
+ * k=0 is linear, k=1 is full cubic (softest center response)
  */
-int16_t mixer_apply_expo(int16_t value, int8_t expo)
+int16_t mixer_apply_expo(int16_t value, uint8_t expo)
 {
     if (expo == 0) {
         return value;
     }
-    
-    // Normalize input to -1.0 to 1.0
+
     float input = (float)value / 32768.0f;
-    float exp_factor = (float)expo / 100.0f;
-    
-    // Cubic expo curve
-    float linear = input;
-    float cubic = input * input * input;
-    float output = linear * (1.0f - fabsf(exp_factor)) + cubic * exp_factor;
-    
-    // Back to int16 range
+    float k = (float)(expo > 100 ? 100 : expo) / 100.0f;
+
+    float output = (1.0f - k) * input + k * input * input * input;
+
     return (int16_t)(output * 32767.0f);
 }
 
@@ -144,15 +136,7 @@ void mixer_process(const xbox_controller_state_t *xbox_state, crsf_channels_t *c
     // ========================================================================
     
     int16_t steering = xbox_state->left_stick_x;
-    
-    // Racing wheel reports inverted magnitude: center=±max, full turn=0
-    // Transform to standard RC axis: center=0, full turn=±max
-    if (steering >= 0) {
-        steering = 32767 - steering;
-    } else {
-        steering = -32767 - steering;
-    }
-    
+
     // Apply deadband
     steering = mixer_apply_deadband(steering, s_config.deadband.steering);
     
