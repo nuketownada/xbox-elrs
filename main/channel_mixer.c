@@ -15,6 +15,12 @@ static const char *TAG = "mixer";
 
 static mixer_config_t s_config;
 
+// Steering trim state (persists across calls, resets on power cycle)
+#define TRIM_STEP 328   // ~1% of half-range per click
+#define TRIM_MAX  9830  // ~30% of half-range
+static int16_t s_steering_trim = 0;
+static xbox_buttons_t s_prev_buttons;
+
 // ============================================================================
 // Math helpers
 // ============================================================================
@@ -131,30 +137,53 @@ void mixer_process(const xbox_controller_state_t *xbox_state, crsf_channels_t *c
     }
     
     // ========================================================================
+    // D-pad steering trim (edge-detected)
+    // ========================================================================
+
+    if (xbox_state->buttons.dpad_up && !s_prev_buttons.dpad_up) {
+        s_steering_trim = 0;
+        ESP_LOGI(TAG, "Steering trim reset");
+    } else if (xbox_state->buttons.dpad_left && !s_prev_buttons.dpad_left) {
+        s_steering_trim += TRIM_STEP;
+        if (s_steering_trim > TRIM_MAX) s_steering_trim = TRIM_MAX;
+        ESP_LOGI(TAG, "Steering trim: %d", s_steering_trim);
+    } else if (xbox_state->buttons.dpad_right && !s_prev_buttons.dpad_right) {
+        s_steering_trim -= TRIM_STEP;
+        if (s_steering_trim < -TRIM_MAX) s_steering_trim = -TRIM_MAX;
+        ESP_LOGI(TAG, "Steering trim: %d", s_steering_trim);
+    }
+
+    // ========================================================================
     // Steering (Aileron channel)
     // Racing wheel steering maps to left_stick_x
     // ========================================================================
-    
+
     int16_t steering = xbox_state->left_stick_x;
 
     // Apply deadband
     steering = mixer_apply_deadband(steering, s_config.deadband.steering);
-    
+
     // Apply expo
     steering = mixer_apply_expo(steering, s_config.expo.steering);
-    
+
+    // Apply trim (after expo/deadband, before invert/endpoints)
+    int32_t trimmed = (int32_t)steering + s_steering_trim;
+    if (trimmed > 32767) trimmed = 32767;
+    if (trimmed < -32767) trimmed = -32767;
+    steering = (int16_t)trimmed;
+
     // Apply invert
     if (s_config.steering_invert) {
         steering = -steering;
     }
-    
+
     // Apply endpoints (asymmetric for steering)
     if (steering >= 0) {
         steering = apply_endpoint(steering, s_config.steering_endpoint_right);
     } else {
         steering = apply_endpoint(steering, s_config.steering_endpoint_left);
     }
-    
+
     crsf_out->ch[RC_CH_AILERON] = crsf_scale_axis(steering);
     
     // ========================================================================
@@ -247,12 +276,11 @@ void mixer_process(const xbox_controller_state_t *xbox_state, crsf_channels_t *c
         crsf_out->ch[s_config.button_y_channel] = crsf_scale_switch(xbox_state->buttons.y);
     }
     
-    // D-pad could be useful for trim or mode selection
-    // Map to a 3-position switch style if needed
-    // For now, not mapped by default
-    
     // ========================================================================
     // ARM channel: high when controller connected and sending data
     // ========================================================================
     crsf_out->ch[s_config.arm_channel] = CRSF_CHANNEL_MAX;
+
+    // Track button state for edge detection
+    s_prev_buttons = xbox_state->buttons;
 }
