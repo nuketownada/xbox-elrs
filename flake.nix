@@ -160,7 +160,7 @@
             echo ""
             echo "  Quick start:"
             echo "    cmake -B fuzz-build fuzz && cmake --build fuzz-build -j\$(nproc)"
-            echo "    ./fuzz-build/test_watchdog                    Run watchdog test"
+            echo "    ./fuzz-build/test_disconnect                  Run disconnect test"
             echo "    ./fuzz-build/fuzz_parse_report corpus/ -max_total_time=60"
             echo "    ./fuzz-build/fuzz_mixer corpus/ -max_total_time=60"
             echo "    ./fuzz-build/fuzz_pack_channels corpus/ -max_total_time=60"

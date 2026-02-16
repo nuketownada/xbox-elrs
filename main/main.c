@@ -63,7 +63,8 @@ static void xbox_state_callback(xbox_slot_t slot, const xbox_controller_state_t 
         for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
             safe.ch[i] = CRSF_CHANNEL_MID;
         }
-        safe.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MIN;
+        safe.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MID;  // Neutral in combined mode = stopped
+        safe.ch[g_mixer_config.arm_channel] = CRSF_CHANNEL_MIN;  // Disarmed
         crsf_set_channels(&safe);
         return;
     }
@@ -134,7 +135,6 @@ void app_main(void)
         .tx_pin = CRSF_TX_PIN,
         .rx_pin = CRSF_RX_PIN,
         .interval_ms = 4,
-        .failsafe_timeout_ms = 250,
     };
     ESP_ERROR_CHECK(crsf_init(&crsf_config));
     ESP_LOGI(TAG, "CRSF initialized on GPIO%d (250Hz)", CRSF_TX_PIN);
