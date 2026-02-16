@@ -65,6 +65,36 @@
           echo "REBOOT" | ${pkgs.netcat-gnu}/bin/nc -u -w 2 "$device" 3334
         '';
 
+        xbox-fuzz = pkgs.writeShellScriptBin "xbox-fuzz" ''
+          set -euo pipefail
+          target="''${1:-all}"
+          seconds="''${2:-60}"
+
+          build_dir="''${FUZZ_BUILD_DIR:-fuzz-build}"
+
+          if [ ! -d "$build_dir" ]; then
+            echo "Building fuzz targets..."
+            CC=clang cmake -B "$build_dir" fuzz
+            cmake --build "$build_dir" -j$(nproc)
+          fi
+
+          run_fuzzer() {
+            local name=$1
+            local corpus="fuzz/corpus-$name"
+            mkdir -p "$corpus"
+            echo "Fuzzing $name for ''${seconds}s..."
+            "./$build_dir/$name" "$corpus" -max_total_time="$seconds" -print_final_stats=1
+          }
+
+          if [ "$target" = "all" ]; then
+            for t in fuzz_parse_report fuzz_mixer fuzz_pack_channels; do
+              run_fuzzer "$t"
+            done
+          else
+            run_fuzzer "$target"
+          fi
+        '';
+
       in {
         devShells.default = pkgsWithEsp.mkShell {
           buildInputs = [ pkgsWithEsp.esp-idf-xtensa ];
@@ -108,6 +138,35 @@
             echo "    xbox-reboot [ip]                Reboot device"
             echo ""
             echo "  Defaults to xbox-elrs.local if no IP specified"
+            echo ""
+            echo "══════════════════════════════════════════════════════════════"
+            echo ""
+          '';
+        };
+
+        devShells.fuzz = pkgs.mkShell {
+          packages = [
+            pkgs.llvmPackages.clang
+            pkgs.cmake
+            pkgs.gnumake
+            xbox-fuzz
+          ];
+
+          shellHook = ''
+            echo ""
+            echo "══════════════════════════════════════════════════════════════"
+            echo "  Xbox-ELRS Fuzz Environment"
+            echo "══════════════════════════════════════════════════════════════"
+            echo ""
+            echo "  Quick start:"
+            echo "    cmake -B fuzz-build fuzz && cmake --build fuzz-build -j\$(nproc)"
+            echo "    ./fuzz-build/test_watchdog                    Run watchdog test"
+            echo "    ./fuzz-build/fuzz_parse_report corpus/ -max_total_time=60"
+            echo "    ./fuzz-build/fuzz_mixer corpus/ -max_total_time=60"
+            echo "    ./fuzz-build/fuzz_pack_channels corpus/ -max_total_time=60"
+            echo ""
+            echo "  Or use the helper:"
+            echo "    xbox-fuzz [target|all] [seconds]"
             echo ""
             echo "══════════════════════════════════════════════════════════════"
             echo ""
