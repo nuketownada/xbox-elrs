@@ -144,7 +144,12 @@ static void parse_controller_report(xbox_slot_t slot, const uint8_t *data, size_
     }
     
     // data[1] == 0x00 means idle/keepalive, 0x01 means actual input
+    // Keepalives prove the controller is still connected — re-fire the
+    // callback with last known state so the CRSF watchdog stays happy.
     if (data[1] != 0x01) {
+        if (s_controller_state[slot].connected && s_user_callback) {
+            s_user_callback(slot, &s_controller_state[slot]);
+        }
         return;
     }
     
