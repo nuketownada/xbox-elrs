@@ -134,9 +134,19 @@ void app_main(void)
         .tx_pin = CRSF_TX_PIN,
         .rx_pin = CRSF_RX_PIN,
         .interval_ms = 4,
+        .failsafe_timeout_ms = 250,
     };
     ESP_ERROR_CHECK(crsf_init(&crsf_config));
     ESP_LOGI(TAG, "CRSF initialized on GPIO%d (250Hz)", CRSF_TX_PIN);
+
+    // Configure failsafe: disarmed + neutral (GroundFlight handles ebrake/cutoff on disarm)
+    crsf_channels_t failsafe = {{0}};
+    for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
+        failsafe.ch[i] = CRSF_CHANNEL_MID;
+    }
+    failsafe.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MID;  // Neutral in combined mode = stopped
+    failsafe.ch[g_mixer_config.arm_channel] = CRSF_CHANNEL_MIN;  // Disarmed
+    crsf_set_failsafe(&failsafe);
 
     // Set initial safe channel state (throttle off)
     crsf_set_channel(RC_CH_THROTTLE, CRSF_CHANNEL_MIN);

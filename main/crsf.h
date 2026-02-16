@@ -49,6 +49,7 @@ typedef struct {
     int tx_pin;         // GPIO for TX
     int rx_pin;         // GPIO for RX (optional, -1 to disable)
     uint32_t interval_ms;  // Packet interval (default 4ms for ELRS 250Hz)
+    uint32_t failsafe_timeout_ms;  // Staleness timeout (0 = default 250ms)
 } crsf_config_t;
 
 /**
@@ -93,6 +94,21 @@ esp_err_t crsf_start(void);
  * Stop CRSF transmission
  */
 void crsf_stop(void);
+
+/**
+ * Configure failsafe channel values
+ *
+ * When channel data goes stale (no crsf_set_channels call within
+ * failsafe_timeout_ms), the CRSF task switches to these values.
+ *
+ * @param channels Failsafe channel values (typically disarmed + neutral)
+ */
+void crsf_set_failsafe(const crsf_channels_t *channels);
+
+/**
+ * Check if failsafe is currently active (stale data detected)
+ */
+bool crsf_is_failsafe_active(void);
 
 // ============================================================================
 // Scaling helpers
