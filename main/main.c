@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "nvs_flash.h"
@@ -40,12 +41,59 @@ static const char *TAG = "xbox-elrs";
 #define CRSF_TX_PIN  43
 #define CRSF_RX_PIN  -1  // Not used (TX only)
 
+// Status LED on XIAO ESP32-S3 (GPIO21, active-low)
+#define LED_PIN      21
+
 // Network ports
 #define UDP_LOG_PORT  3333
 #define OTA_CMD_PORT  3334
 
 // Mixer configuration
 static mixer_config_t g_mixer_config = MIXER_CONFIG_DEFAULT();
+
+/**
+ * Status LED task
+ *
+ * Slow blink (1Hz)  = all good (WiFi + controller connected)
+ * Fast blink (4Hz)  = no WiFi
+ * Solid on          = no controller connected
+ */
+static void led_task(void *pvParameters)
+{
+    gpio_reset_pin(LED_PIN);
+    gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(LED_PIN, 1);  // Off (active-low)
+
+    while (1) {
+        bool wifi_ok = wifi_is_connected();
+        bool controller_ok = false;
+
+        if (xbox_receiver_is_connected()) {
+            xbox_controller_state_t state;
+            if (xbox_receiver_get_state(XBOX_SLOT_1, &state) == ESP_OK && state.connected) {
+                controller_ok = true;
+            }
+        }
+
+        if (!wifi_ok) {
+            // Fast blink — no WiFi
+            gpio_set_level(LED_PIN, 0);
+            vTaskDelay(pdMS_TO_TICKS(125));
+            gpio_set_level(LED_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(125));
+        } else if (!controller_ok) {
+            // Solid on — waiting for controller
+            gpio_set_level(LED_PIN, 0);
+            vTaskDelay(pdMS_TO_TICKS(250));
+        } else {
+            // Slow blink — all good
+            gpio_set_level(LED_PIN, 0);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            gpio_set_level(LED_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+    }
+}
 
 /**
  * Callback from Xbox receiver when controller state changes
@@ -63,7 +111,8 @@ static void xbox_state_callback(xbox_slot_t slot, const xbox_controller_state_t 
         for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
             safe.ch[i] = CRSF_CHANNEL_MID;
         }
-        safe.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MIN;
+        safe.ch[RC_CH_THROTTLE] = CRSF_CHANNEL_MID;  // Neutral in combined mode = stopped
+        safe.ch[g_mixer_config.arm_channel] = CRSF_CHANNEL_MIN;  // Disarmed
         crsf_set_channels(&safe);
         return;
     }
@@ -134,7 +183,6 @@ void app_main(void)
         .tx_pin = CRSF_TX_PIN,
         .rx_pin = CRSF_RX_PIN,
         .interval_ms = 4,
-        .failsafe_timeout_ms = 250,
     };
     ESP_ERROR_CHECK(crsf_init(&crsf_config));
     ESP_LOGI(TAG, "CRSF initialized on GPIO%d (250Hz)", CRSF_TX_PIN);
@@ -156,6 +204,9 @@ void app_main(void)
     ESP_ERROR_CHECK(xbox_receiver_init(xbox_state_callback));
     ESP_LOGI(TAG, "Xbox receiver initialized");
     
+    // Start status LED
+    xTaskCreate(led_task, "led", 2048, NULL, 2, NULL);
+
     // Main loop - just status reporting
     while (1) {
         if (xbox_receiver_is_connected()) {

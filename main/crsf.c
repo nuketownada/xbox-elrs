@@ -26,12 +26,8 @@ static bool s_running = false;
 static TaskHandle_t s_task_handle = NULL;
 static uint32_t s_interval_ms = 4;
 
-// Failsafe watchdog state
-static TickType_t s_last_update_tick = 0;
-static bool s_ever_updated = false;
+// Failsafe channel values (sent when controller disconnects)
 static crsf_channels_t s_failsafe_channels;
-static TickType_t s_failsafe_timeout_ticks = 0;
-static bool s_failsafe_active = false;
 
 // CRC8 lookup table (polynomial 0xD5)
 static const uint8_t crc8_lut[256] = {
@@ -137,35 +133,16 @@ static void send_channels_frame(void)
     frame[1] = 24;  // length: type(1) + payload(22) + crc(1)
     frame[2] = CRSF_FRAMETYPE_RC_CHANNELS_PACKED;
     
-    // Get current channel data, applying failsafe if stale
+    // Get current channel data
     crsf_channels_t channels;
     if (xSemaphoreTake(s_channels_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-        bool stale = false;
-        if (s_ever_updated && s_failsafe_timeout_ticks > 0) {
-            TickType_t now = xTaskGetTickCount();
-            TickType_t elapsed = now - s_last_update_tick;
-            if (elapsed >= s_failsafe_timeout_ticks) {
-                stale = true;
-            }
-        }
-
-        if (stale) {
-            memcpy(&channels, &s_failsafe_channels, sizeof(crsf_channels_t));
-            if (!s_failsafe_active) {
-                s_failsafe_active = true;
-                ESP_LOGW(TAG, "CRSF failsafe active — channel data stale");
-            }
-        } else {
-            memcpy(&channels, &s_channels, sizeof(crsf_channels_t));
-            if (s_failsafe_active) {
-                s_failsafe_active = false;
-                ESP_LOGI(TAG, "CRSF failsafe cleared — data resumed");
-            }
-        }
+        memcpy(&channels, &s_channels, sizeof(crsf_channels_t));
         xSemaphoreGive(s_channels_mutex);
     } else {
-        // Mutex timeout - use failsafe
-        memcpy(&channels, &s_failsafe_channels, sizeof(crsf_channels_t));
+        // Mutex timeout - use safe defaults
+        for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
+            channels.ch[i] = CRSF_CHANNEL_MID;
+        }
     }
     
     // Pack channel data
@@ -218,12 +195,6 @@ esp_err_t crsf_init(const crsf_config_t *config)
     }
     // Default failsafe: throttle at MIN (stopped)
     s_failsafe_channels.ch[2] = CRSF_CHANNEL_MIN;
-
-    // Failsafe timeout (default 250ms if not set)
-    uint32_t timeout_ms = config->failsafe_timeout_ms > 0 ? config->failsafe_timeout_ms : 250;
-    s_failsafe_timeout_ticks = pdMS_TO_TICKS(timeout_ms);
-    s_failsafe_active = false;
-    s_ever_updated = false;
     
     // Configure UART
     uart_config_t uart_config = {
@@ -278,8 +249,6 @@ void crsf_set_channels(const crsf_channels_t *channels)
 
     if (xSemaphoreTake(s_channels_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         memcpy(&s_channels, channels, sizeof(crsf_channels_t));
-        s_last_update_tick = xTaskGetTickCount();
-        s_ever_updated = true;
         xSemaphoreGive(s_channels_mutex);
     }
 }
@@ -336,7 +305,3 @@ void crsf_set_failsafe(const crsf_channels_t *channels)
     }
 }
 
-bool crsf_is_failsafe_active(void)
-{
-    return s_failsafe_active;
-}

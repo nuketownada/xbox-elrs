@@ -28,21 +28,22 @@ static bool s_ever_connected = false;
 
 #define MAX_RETRY 10
 
+static bool s_mdns_initialized = false;
+
 static void mdns_init_service(void)
 {
-    esp_err_t err = mdns_init();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "mDNS init failed: %s", esp_err_to_name(err));
-        return;
+    if (!s_mdns_initialized) {
+        esp_err_t err = mdns_init();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "mDNS init failed: %s", esp_err_to_name(err));
+            return;
+        }
+        mdns_hostname_set("xbox-elrs");
+        mdns_instance_name_set("Xbox ELRS Bridge");
+        mdns_service_add(NULL, "_xbox-elrs-log", "_udp", 3333, NULL, 0);
+        mdns_service_add(NULL, "_xbox-elrs-ota", "_tcp", 3334, NULL, 0);
+        s_mdns_initialized = true;
     }
-    
-    mdns_hostname_set("xbox-elrs");
-    mdns_instance_name_set("Xbox ELRS Bridge");
-    
-    // Advertise our UDP services
-    mdns_service_add(NULL, "_xbox-elrs-log", "_udp", 3333, NULL, 0);
-    mdns_service_add(NULL, "_xbox-elrs-ota", "_udp", 3334, NULL, 0);
-    
     ESP_LOGI(TAG, "mDNS: xbox-elrs.local");
 }
 
@@ -98,7 +99,7 @@ esp_err_t wifi_init_sta(void)
         .sta = {
             .ssid = CONFIG_WIFI_SSID,
             .password = CONFIG_WIFI_PASSWORD,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+            .threshold.authmode = WIFI_AUTH_WPA_WPA2_PSK,
         },
     };
     

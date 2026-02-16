@@ -125,11 +125,22 @@ static void send_player_led(int player)
  */
 static void parse_controller_report(xbox_slot_t slot, const uint8_t *data, size_t len)
 {
-    // Check for connection status packets (2 bytes)
-    if (len == 2 && data[0] == 0x08) {
-        // 08 80 = controller connected notification
-        ESP_LOGI(TAG, "Controller %d connect notification", slot);
-        send_player_led(slot);
+    // Connection status packets: 0x08 0x80 = connected, 0x08 0x00 = disconnected
+    if (len >= 2 && data[0] == 0x08) {
+        if (data[1] & 0x80) {
+            ESP_LOGI(TAG, "Controller %d connected (wireless)", slot);
+            send_player_led(slot);
+        } else {
+            ESP_LOGW(TAG, "Controller %d disconnected (wireless)", slot);
+            if (xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                s_controller_state[slot].connected = false;
+                xbox_controller_state_t copy = s_controller_state[slot];
+                xSemaphoreGive(s_state_mutex);
+                if (s_user_callback) {
+                    s_user_callback(slot, &copy);
+                }
+            }
+        }
         return;
     }
     
