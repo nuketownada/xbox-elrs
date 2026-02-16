@@ -100,8 +100,8 @@ typedef struct {
     .expo = { .steering = 0, .throttle = 0 }, \
     .deadband = { .steering = 3, .throttle = 2 }, \
     .steering_invert = false, \
-    .steering_endpoint_left = 70, \
-    .steering_endpoint_right = 71, \
+    .steering_endpoint_left = 27, \
+    .steering_endpoint_right = 28, \
     .throttle_invert = false, \
     .throttle_endpoint = 46, \
     .brake_endpoint = 28, \
